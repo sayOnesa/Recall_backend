@@ -4,8 +4,9 @@ require_once './index.php';
 require_login();
 
 $user_id = $_SESSION['user_id'];
+$frontend_origin = "https://recall-lnrz.onrender.com";
 
-header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Origin: $frontend_origin");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json; charset=UTF-8");
 

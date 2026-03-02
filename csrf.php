@@ -1,7 +1,10 @@
 <?php
+
+$frontend_origin = "https://recall-lnrz.onrender.com";
+
 require_once "./index.php";
 header("Content-Type: application/json; charset=utf-8");
-header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Origin: $frontend_origin");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Access-Control-Allow-Credentials: true");
