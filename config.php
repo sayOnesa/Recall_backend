@@ -11,15 +11,15 @@ header("Content-Type: application/json; charset=utf-8");
 $frontend_origin = "https://recall-lnrz.onrender.com";
 
 // CORS headers
-header("Access-Control-Allow-Origin: $frontend_origin");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+// header("Access-Control-Allow-Origin: $frontend_origin");
+// header("Access-Control-Allow-Credentials: true");
+// header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+// header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 
-// Security headers
-header("X-Content-Type-Options: nosniff");
-header("X-Frame-Options: DENY");
-header("Content-Security-Policy: default-src 'self'");
+// // Security headers
+// header("X-Content-Type-Options: nosniff");
+// header("X-Frame-Options: DENY");
+// header("Content-Security-Policy: default-src 'self'");
 
 // Handle preflight OPTIONS requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
