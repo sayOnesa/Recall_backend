@@ -37,7 +37,6 @@ session_set_cookie_params([
     'path' => '/',                  // cookie valid site-wide
     'secure' => true,               // HTTPS only
     'httponly' => true,             // JS cannot read
-    'samesite' => 'None'            // allows cross-site requests
 ]);
 
 if (session_status() === PHP_SESSION_NONE) {
