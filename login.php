@@ -1,8 +1,12 @@
 <?php
 
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 $frontend_origin = "https://recall-lnrz.onrender.com";
 
 require "./index.php";
+
 header("Content-Type: application/json; charset=utf-8");
 header("Access-Control-Allow-Origin: $frontend_origin");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
@@ -17,110 +21,182 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-// IP-based rate limiting
-$ipAddress = $_SERVER['REMOTE_ADDR'];
-$rateLimitFile = sys_get_temp_dir() . '/login_attempts_' . md5($ipAddress);
-$currentTime = time();
-$timeWindow = 60; // 5 min
-$maxAttempts = 5;
+try {
 
-if (file_exists($rateLimitFile)) {
-    $attempts = json_decode(file_get_contents($rateLimitFile), true);
-    $attempts = array_filter($attempts, function($timestamp) use ($currentTime, $timeWindow) {
-        return ($currentTime - $timestamp) < $timeWindow;
-    });
-    
-    if (count($attempts) >= $maxAttempts) {
-        http_response_code(429);
+    /* -------------------------
+       Rate limiting
+    ------------------------- */
+
+    $ipAddress = $_SERVER['REMOTE_ADDR'];
+    $rateLimitFile = sys_get_temp_dir() . '/login_attempts_' . md5($ipAddress);
+
+    $currentTime = time();
+    $timeWindow = 60;
+    $maxAttempts = 5;
+
+    if (file_exists($rateLimitFile)) {
+
+        $attempts = json_decode(file_get_contents($rateLimitFile), true) ?? [];
+
+        $attempts = array_filter($attempts, function($timestamp) use ($currentTime, $timeWindow) {
+            return ($currentTime - $timestamp) < $timeWindow;
+        });
+
+        if (count($attempts) >= $maxAttempts) {
+            http_response_code(429);
+            echo json_encode([
+                "success" => false,
+                "message" => "Too many login attempts. Please try again later."
+            ]);
+            exit;
+        }
+
+        $attempts[] = $currentTime;
+        file_put_contents($rateLimitFile, json_encode($attempts));
+
+    } else {
+        file_put_contents($rateLimitFile, json_encode([$currentTime]));
+    }
+
+    /* -------------------------
+       Read request data
+    ------------------------- */
+
+    $raw = file_get_contents("php://input");
+
+    if (!$raw) {
+        throw new Exception("Empty request body");
+    }
+
+    $data = json_decode($raw, true);
+
+    if (!$data) {
+        throw new Exception("Invalid JSON request");
+    }
+
+    $email = isset($data['email'])
+        ? trim(htmlspecialchars($data['email'], ENT_QUOTES, 'UTF-8'))
+        : '';
+
+    $password = $data['password'] ?? '';
+
+    if (!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
         echo json_encode([
             "success" => false,
-            "message" => "Too many login attempts. Please try again later."
+            "message" => "Invalid email format."
         ]);
         exit;
     }
 
-    // Add current attempt
-    $attempts[] = $currentTime;
-    file_put_contents($rateLimitFile, json_encode($attempts));
-} else {
-    // First attempt
-    file_put_contents($rateLimitFile, json_encode([$currentTime]));
-}
+    /* -------------------------
+       Database connection
+    ------------------------- */
 
-$data = json_decode(file_get_contents("php://input"), true); //Gets request from frontend
+    $mysqli = connect_to_database($env);
 
-$email = isset($data['email']) ? trim(htmlspecialchars($data['email'], ENT_QUOTES, 'UTF-8')) : '';
-$password = $data['password'] ?? '';
+    if (!$mysqli) {
+        throw new Exception("Database connection failed");
+    }
 
-if (!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/', $email)) {
-    echo json_encode([
-        "success" => false,
-        "message" => "Invalid email format."
-    ]);
-    exit;
-}
+    /* -------------------------
+       Prepare query
+    ------------------------- */
 
+    $stmt = $mysqli->prepare(
+        "SELECT id, email, username, first_name, last_name, profile_picture, password_hash 
+         FROM Users WHERE email = ? LIMIT 1"
+    );
 
-$mysqli = connect_to_database($env);
-$stmt = $mysqli->prepare("SELECT * FROM Users WHERE email = ? LIMIT 1");
-$stmt->bind_param("s", $email);
-$stmt->execute();
-$result = $stmt->get_result();
-$profile = $result->fetch_assoc();
+    if (!$stmt) {
+        throw new Exception("Failed to prepare SQL statement");
+    }
 
-try {
+    $stmt->bind_param("s", $email);
+
+    if (!$stmt->execute()) {
+        throw new Exception("Failed to execute SQL query");
+    }
+
+    $result = $stmt->get_result();
+
+    if (!$result) {
+        throw new Exception("Failed to retrieve query result");
+    }
+
+    $profile = $result->fetch_assoc();
+
+    /* -------------------------
+       Authentication
+    ------------------------- */
+
     if (!$profile) {
+
         echo json_encode([
             "success" => false,
             "message" => "Sorry, we couldn't find your account!"
         ]);
+
         exit;
     }
+
     if (!password_verify($password, $profile['password_hash'])) {
+
         echo json_encode([
             "success" => false,
             "message" => "Incorrect password!"
         ]);
-        exit;
-    } else {
-        $csrfToken = bin2hex(random_bytes(32));
-        $_SESSION['csrf_token'] = $csrfToken;
-        $_SESSION['user_id'] = $profile['id'];
-        $_SESSION['email'] = $profile['email'];
-        $_SESSION['username'] = $profile['username'];
-        $_SESSION['first_name'] = $profile['first_name'];
-        $_SESSION['last_name'] = $profile['last_name'];
-        $_SESSION['profile_picture'] = "server/uploads/" . $profile['profile_picture'];
-        
-        if ($profile['profile_picture'] != null){
-            $_SESSION['profile_picture'] = "server/uploads/" . $profile['profile_picture'];
-        } else {
-            $_SESSION['profile_picture'] = null;
-        }
 
-        // Log successful login
-        error_log("Successful login: " . $email);
-        echo json_encode([
-            "success" => true,
-            "message" => "Login successful.",
-            "user" => [
-                "email" => $profile['email'],
-                "username" => $profile['username'],
-                "first_name" => $profile['first_name'],
-                "last_name" => $profile['last_name'],
-                "profile_picture" => $_SESSION['profile_picture']
-            ],
-            "csrf_token" => $csrfToken
-        ]);
+        exit;
     }
-} catch (Exception $e) {
-    $mysqli->rollback();
-    http_response_code(500);
+
+    /* -------------------------
+       Successful login
+    ------------------------- */
+
+    $csrfToken = bin2hex(random_bytes(32));
+
+    $_SESSION['csrf_token'] = $csrfToken;
+    $_SESSION['user_id'] = $profile['id'];
+    $_SESSION['email'] = $profile['email'];
+    $_SESSION['username'] = $profile['username'];
+    $_SESSION['first_name'] = $profile['first_name'];
+    $_SESSION['last_name'] = $profile['last_name'];
+
+    if ($profile['profile_picture'] != null) {
+        $_SESSION['profile_picture'] = "server/uploads/" . $profile['profile_picture'];
+    } else {
+        $_SESSION['profile_picture'] = null;
+    }
+
+    error_log("Successful login: " . $email);
+
     echo json_encode([
-        "success" => false, 
-        "message" => $e->getMessage()
+        "success" => true,
+        "message" => "Login successful.",
+        "user" => [
+            "email" => $profile['email'],
+            "username" => $profile['username'],
+            "first_name" => $profile['first_name'],
+            "last_name" => $profile['last_name'],
+            "profile_picture" => $_SESSION['profile_picture']
+        ],
+        "csrf_token" => $csrfToken
     ]);
-    exit();
+
+    $stmt->close();
+    $mysqli->close();
+
+} catch (Exception $e) {
+
+    http_response_code(500);
+
+    error_log("Login error: " . $e->getMessage());
+
+    echo json_encode([
+        "success" => false,
+        "message" => "Server error",
+        "debug" => $e->getMessage()
+    ]);
+
+    exit;
 }
-$mysqli->close();
-?>
