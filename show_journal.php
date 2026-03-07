@@ -1,21 +1,6 @@
 <?php
 require_once './index.php';
 
-// --- CORS Configuration ---
-$frontend_origin = "https://recall-lnrz.onrender.com";
-
-header("Access-Control-Allow-Origin: $frontend_origin");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Credentials: true");
-header("Content-Type: application/json; charset=UTF-8");
-
-// --- Handle preflight OPTIONS ---
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
 // --- Ensure user is logged in ---
 require_login();
 
