@@ -30,10 +30,10 @@ try {
 
     $journals = [];
     while ($row = $result->fetch_assoc()) {
-        $row['title'] = htmlspecialchars_decode($row['title']);
-        $row['tags'] = htmlspecialchars_decode($row['tags']);
-        $journals[] = $row;
-    }
+    $row['title'] = htmlspecialchars_decode($row['title'] ?? '');
+    $row['tags']  = htmlspecialchars_decode($row['tags'] ?? '');
+    $journals[] = $row;
+}
 
     echo json_encode($journals, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
