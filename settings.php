@@ -1,18 +1,7 @@
 <?php
 require_once "./index.php";
 
-$frontend_origin = "https://recall-lnrz.onrender.com";
-
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: $frontend_origin');
-header('Access-Control-Allow-Methods: POST, GET');
-header('Access-Control-Allow-Headers: Content-Type');
-
 require_login();
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit(0);
-}
 
 $mysqli = connect_to_database($env);
 $mysqli->begin_transaction();
